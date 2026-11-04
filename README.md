@@ -197,11 +197,12 @@ An important objective of ContentIQ is to implement fundamental data structures 
 |---|---|
 | Hash Tables | Hashtag lookup and frequency counting |
 | Graphs | Hashtag relationship modelling |
-| Max Heap | Retrieving top-ranked recommendations |
+| Heaps (min/max) | Retrieving top-ranked recommendations |
 | Tries | Hashtag autocomplete |
 | Sets | Duplicate removal and hashtag filtering |
 | Sorting | Ranking hashtags |
 | String Algorithms | Caption processing and comparison |
+| MinHash | Approximate near-duplicate caption detection |
 | Similarity Search | Finding semantically similar captions |
 
 ## 7. Suggested Project Structure
@@ -215,11 +216,15 @@ ContentIQ/
 │   │   ├── database/
 │   │   ├── models/
 │   │   ├── algorithms/
-│   │   │   ├── hashing.py
-│   │   │   ├── graphs.py
-│   │   │   ├── heaps.py
-│   │   │   ├── tries.py
-│   │   │   └── similarity.py
+│   │   │   ├── hash_tables/
+│   │   │   ├── graphs/
+│   │   │   ├── heaps/
+│   │   │   ├── tries/
+│   │   │   ├── minhash/
+│   │   │   ├── sets/
+│   │   │   ├── sorting/
+│   │   │   ├── string_algorithms/
+│   │   │   └── similarity_search/
 │   │   ├── modules/
 │   │   │   ├── duplicate_detection/
 │   │   │   ├── hashtag_analytics/
@@ -268,6 +273,15 @@ Each module will be tested independently.
 
 ---
 
-**Project Objective:**
+## 10. Installing Dependencies
 
-To build an Instagram content intelligence engine that combines practical Data Structures and Algorithms with text analysis, engagement analytics and context-aware recommendations to help users make more informed content decisions.
+The repository keeps Python and frontend dependencies in separate manifests. From the repository root, install them with:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
+cd frontend
+npm install
+```
+
+SQLite is included with Python and requires no separate package. FAISS remains optional and is not included in the initial setup.
