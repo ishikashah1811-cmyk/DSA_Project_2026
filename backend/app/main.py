@@ -5,7 +5,9 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.hashtag_analytics import create_analytics_router
 from app.api.hashtag_recommendation import create_recommendation_router
+from app.modules.hashtag_analytics.service import HashtagAnalyticsService
 from app.modules.hashtag_recommendation.service import HashtagRecommendationService
 
 
@@ -33,6 +35,9 @@ def create_app(
         allow_headers=["Content-Type"],
     )
     application.include_router(create_recommendation_router(service))
+    application.include_router(
+        create_analytics_router(HashtagAnalyticsService())
+    )
 
     @application.get("/api/health")
     def health() -> dict[str, str]:

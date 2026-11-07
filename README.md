@@ -41,6 +41,18 @@ Analyses hashtag usage and historical engagement to identify useful and popular 
 - Sorting
 - Priority Queues / Heaps
 
+**Module 2 implementation:**
+
+- Hashtag analytics are exposed separately from Module 3 under `/api/hashtag-analytics`.
+- The frontend analytics dashboard is available at `/analytics`; it displays dataset totals, lets users rank hashtags by popularity or average engagement, and searches co-occurring hashtags.
+- `GET /api/hashtag-analytics/overview` returns post counts, unique hashtag counts, total hashtag uses, and total likes, comments, and shares.
+- `GET /api/hashtag-analytics/hashtags?sort_by=popularity&limit=20` ranks hashtags by usage. Use `sort_by=engagement` to rank by average likes, comments, and shares per post containing each hashtag.
+- `GET /api/hashtag-analytics/hashtags/{hashtag}/related?limit=10` returns hashtags that co-occur with the requested hashtag and their co-occurrence counts.
+- Module 2 has its own analytics service, hashtag index, and graph instance. Its hashtag aggregates use the custom separate-chaining hash table in `algorithms/hash_tables/hash_table.py`; its related-tag output and deterministic tie ordering use the stable merge sort in `algorithms/sorting/merge_sort.py`.
+- Popularity and engagement rankings use the existing max heap, and co-occurrences use the existing weighted hashtag graph. These shared structures retain their existing behavior for Module 3.
+- It reads the same CSV columns used by Module 3. The dataset path uses `CONTENTIQ_DATASET_PATH` or defaults to `Dataset/instagram_posts_synthetic.csv`.
+- Tests cover hash collisions and resizing, stable sorting, analytics output, and a Module 3 recommendation request using the shared graph.
+
 ### Module 3: Context-Aware Hashtag Recommendation
 
 Recommends relevant hashtags based on the meaning of a user's caption and the hashtags they have already selected.
@@ -84,7 +96,7 @@ The weights are initial values and can be tuned during testing.
 - The CSV uses the dataset's columns: `Post_Caption`, `Post_Hashtags`, `No_of_likes`, `No_of_comments`, and `No_of_shares`. Hashtags should use `#` prefixes, as in the supplied dataset.
 - **Graph:** each hashtag is a node. Two tags share a weighted, undirected edge whose weight counts the posts where they occur together. Caption matches supply initial candidates; direct neighbors of selected tags expand that set. Graph association is the average Jaccard overlap between a candidate and each selected tag, which reduces the advantage of generic tags.
 - **Scoring:** for each candidate, semantic relevance and engagement are averaged over its five most similar dataset posts. Engagement is `log1p(likes + comments + shares)` normalized against the maximum in the dataset. Graph association is the average Jaccard overlap described above; it is zero when no hashtags were selected. The final score is `0.50 * relevance + 0.30 * association + 0.20 * engagement`. Selected hashtags are excluded from results.
-- **Current scope/deviation:** the workspace has `Dataset/instagram_posts_synthetic.csv` (10,000 rows); it is not tracked in Git. The service uses this path by default and reports an error if it is missing; set `CONTENTIQ_DATASET_PATH` to use another CSV. It reads the CSV directly and builds vectors and indexes in memory; it does not persist posts or embeddings in SQLite. The added frontend is a recommendation screen for this module; it does not yet include the other planned application modules.
+- **Current scope/deviation:** the workspace dataset `Dataset/instagram_posts_synthetic.csv` has 20,000 synthetic rows; it is not tracked in Git. The original 10,000 rows were preserved, and 10,000 additional synthetic rows were appended, including 1,000 posts tagged `#winter`. The service uses this path by default and reports an error if it is missing; set `CONTENTIQ_DATASET_PATH` to use another CSV. It reads the CSV directly and builds vectors and indexes in memory; it does not persist posts or embeddings in SQLite. The frontend includes the Module 2 analytics dashboard and Module 3 recommendation screen; the other planned application modules are not included yet.
 
 To run the API from the repository root in PowerShell:
 
@@ -99,11 +111,11 @@ The service uses `Dataset/instagram_posts_synthetic.csv` by default. To use a di
 To start the frontend manually in a second terminal:
 
 ```powershell
-cd frontend
+Set-Location frontend
 npm run dev
 ```
 
-The UI uses `http://127.0.0.1:8000` by default. Set `NEXT_PUBLIC_API_URL` before starting Next.js to use a different backend URL. The backend permits the local Next.js origins by default; set `CONTENTIQ_CORS_ORIGINS` to a comma-separated list of allowed origins when deploying.
+Open `http://127.0.0.1:3000` to use the frontend. The Next.js development server allows both `127.0.0.1` and `localhost` for its development resources. The UI uses `http://127.0.0.1:8000` for the backend by default. Set `NEXT_PUBLIC_API_URL` before starting Next.js to use a different backend URL. The backend permits the local Next.js origins by default; set `CONTENTIQ_CORS_ORIGINS` to a comma-separated list of allowed origins when deploying.
 
 Example request:
 
@@ -133,9 +145,9 @@ API docs are available at `/docs` while the server is running.
 | Programming Language | Python | Core backend logic and algorithms; used |
 | Data Processing | Python CSV, NumPy | CSV loading and embedding math; used by Module 3 |
 | Backend | FastAPI | Recommendation API; used |
-| Frontend | Next.js, TypeScript | Recommendation page; used |
-| Styling | CSS | Current page styling; Tailwind is installed but not used by this page |
-| Visualisation | Recharts | Planned for analytics dashboards; not currently used |
+| Frontend | Next.js, TypeScript | Analytics dashboard and recommendation page; used |
+| Styling | CSS | Analytics dashboard and recommendation page styling; Tailwind is installed but not used |
+| Visualisation | CSS bars and metric cards | Hashtag ranking dashboard; used |
 | Primary Database | SQLite | Planned persistent storage; Module 3 currently reads CSV and keeps its index in memory |
 | Text Embeddings | Sentence Transformers | Caption embeddings; used |
 | Similarity Search | Cosine Similarity with NumPy | Caption and candidate-post matching; used |
@@ -236,9 +248,10 @@ An important objective of ContentIQ is to implement fundamental data structures 
 
 | Data Structure / Algorithm | Application | Status |
 |---|---|---|
-| Hash maps and lists | Hashtag-to-post lookup and candidate evidence | Used by Module 3 |
-| Graph | Weighted hashtag co-occurrence and selected-tag associations | Used by Module 3 |
-| Max heap | Retrieving top-ranked recommendations | Used by Module 3 |
+| Separate-chaining hash table; hash maps and lists | Module 2 hashtag aggregates; Module 3 hashtag-to-post lookup | Used by Modules 2 and 3 |
+| Graph | Weighted hashtag co-occurrence and selected-tag associations | Used by Modules 2 and 3 |
+| Max heap | Ranking hashtags and retrieving top-ranked recommendations | Used by Modules 2 and 3 |
+| Merge sort | Deterministic ordering of analytics and related hashtags | Used by Module 2 |
 | Sets | Deduplicating tags and excluding selected hashtags | Used by Module 3 |
 | Sorting | Selecting nearest captions and candidate posts | Used by Module 3 |
 | String processing | Extracting and normalizing hashtags | Used by Module 3 |
@@ -312,7 +325,7 @@ Each module will be tested independently.
 8. Integrate the backend and frontend.
 9. Test, evaluate and deploy ContentIQ.
 
-The recommendation API, graph, and frontend described below are implemented. The other roadmap modules and SQLite persistence remain planned work.
+The Module 2 hashtag analytics API and Module 3 recommendation API, graph, and frontend are implemented. Module 1 duplicate caption detection and SQLite persistence remain planned work.
 
 ---
 
@@ -335,10 +348,10 @@ The table below describes the current implementation rather than the future modu
 
 | Part | What we implemented and how it works |
 |---|---|
-| Dataset | Reads `Dataset/instagram_posts_synthetic.csv`, which contains 10,000 posts. It uses `Post_Caption` for text, `Post_Hashtags` for tags, and the three `No_of_*` columns for engagement. The file is not tracked in Git; `CONTENTIQ_DATASET_PATH` can point to another CSV with the same columns. |
+| Dataset | Reads `Dataset/instagram_posts_synthetic.csv`, which currently contains 20,000 synthetic posts (the original 10,000 plus 10,000 added rows). It uses `Post_Caption` for text, `Post_Hashtags` for tags, and the three `No_of_*` columns for engagement. The file is not tracked in Git; `CONTENTIQ_DATASET_PATH` can point to another CSV with the same columns. |
 | Caption embeddings | Uses the Sentence Transformers model `sentence-transformers/all-MiniLM-L6-v2` to encode every dataset caption. The normalized vectors are held in memory. The model and index initialize on the first recommendation request, so that request may take longer and may require a model download. |
 | Caption similarity | Encodes the submitted caption and compares it with dataset vectors using cosine similarity. The `neighbors` request value (default 30) controls how many closest posts supply the initial candidate hashtags. |
-| Hashtag graph | Builds a sparse, undirected graph while reading posts. A hashtag is a node; an edge connects two tags that appear in the same post, and its weight is the number of such posts. The supplied data produces 114 nodes and 1,619 unique edges. |
+| Hashtag graph | Builds a sparse, undirected graph while reading posts. A hashtag is a node; an edge connects two tags that appear in the same post, and its weight is the number of such posts. The current 20,000-row dataset produces 139 nodes and 1,750 unique edges. |
 | Candidate hashtags | Starts with tags from the closest caption posts, then adds direct graph neighbors for every user-selected tag. Finally, it removes tags the user already selected. This lets selected-tag relationships introduce candidates even when they are not in the closest caption posts. |
 | Graph association | For a candidate and selected tag, computes Jaccard similarity: co-occurrence count divided by the number of posts containing either tag. It averages this value over selected tags. With no selected tags, this score is zero. |
 | Engagement | Adds likes, comments, and shares for each post. Applies `log1p` and scales against the largest post engagement in the dataset, reducing the effect of unusually large counts. |

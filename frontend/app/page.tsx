@@ -68,7 +68,10 @@ export default function Home() {
     <main className="page">
       <header className="header">
         <a className="brand" href="/">ContentIQ</a>
-        <span>HASHTAG RECOMMENDATIONS</span>
+        <nav className="site-nav" aria-label="Main navigation">
+          <a className="nav-link nav-link-active" href="/">Recommendations</a>
+          <a className="nav-link" href="/analytics">Analytics</a>
+        </nav>
       </header>
 
       <section className="intro">

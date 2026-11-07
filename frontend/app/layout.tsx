@@ -3,8 +3,8 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "ContentIQ | Hashtag recommendations",
-  description: "Find context-aware hashtags for your next post.",
+  title: "ContentIQ | Hashtag intelligence",
+  description: "Explore hashtag analytics and find context-aware recommendations.",
 };
 
 export default function RootLayout({
