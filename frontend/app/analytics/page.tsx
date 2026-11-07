@@ -145,6 +145,7 @@ export default function AnalyticsPage() {
         <nav className="site-nav" aria-label="Main navigation">
           <a className="nav-link" href="/">Recommendations</a>
           <a className="nav-link nav-link-active" href="/analytics">Analytics</a>
+          <a className="nav-link" href="/duplicates">Duplicates</a>
         </nav>
       </header>
 

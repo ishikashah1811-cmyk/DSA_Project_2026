@@ -71,6 +71,7 @@ export default function Home() {
         <nav className="site-nav" aria-label="Main navigation">
           <a className="nav-link nav-link-active" href="/">Recommendations</a>
           <a className="nav-link" href="/analytics">Analytics</a>
+          <a className="nav-link" href="/duplicates">Duplicates</a>
         </nav>
       </header>
 
