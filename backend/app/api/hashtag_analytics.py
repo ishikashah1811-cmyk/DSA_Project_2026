@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, Union
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
@@ -55,7 +55,7 @@ def create_analytics_router(service: HashtagAnalyticsService) -> APIRouter:
     def related_hashtags(
         hashtag: str,
         limit: int = Query(10, ge=1, le=100),
-    ) -> list[dict[str, str | int]]:
+    ) -> list[dict[str, Union[str, int]]]:
         try:
             return [
                 {"hashtag": related, "cooccurrences": count}

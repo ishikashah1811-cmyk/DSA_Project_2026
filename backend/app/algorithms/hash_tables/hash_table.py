@@ -1,5 +1,7 @@
 """A separate-chaining hash table for constant-time average key lookup."""
 
+from __future__ import annotations
+
 from collections.abc import Iterator
 from typing import Generic, TypeVar
 

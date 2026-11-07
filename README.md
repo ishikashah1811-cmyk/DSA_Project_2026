@@ -20,9 +20,18 @@ Identifies identical and near-duplicate captions within a dataset.
 
 **DSA concepts:**
 - Hashing
-- String matching
+- Strings and Unicode normalization
 - Sets
-- Similarity algorithms
+- Shingling, Jaccard similarity, MinHash and LSH
+
+**Module 1 implementation:**
+
+- `POST /api/duplicate-detection/scan` scans the configured CSV. Send an optional `similarity_threshold` from 0 to 1; the default is `0.75`.
+- Exact matches are grouped by normalized caption with the custom separate-chaining hash table. Normalization uses Unicode NFKC, case folding, punctuation boundaries, and consistent whitespace. Hashtags and common emoji/symbol code points are retained.
+- Near-duplicate candidates are generated from 3-token shingle sets using 64 deterministic BLAKE2b-based MinHash values and 16 LSH bands. Candidate pairs are verified with exact Jaccard similarity; LSH can miss pairs and may generate quadratic candidates in a crowded bucket.
+- Blank captions are skipped. The response includes dataset rows scanned, analyzed captions, exact groups and extra duplicate posts, verified near pairs, unique captions, post IDs, and CSV row numbers.
+- The frontend is available at `/duplicates`, uses the existing `NEXT_PUBLIC_API_URL` setting, and shows backend results with threshold control and exact/near/unique views.
+- Module 1 reads the CSV directly and does not use SQLite or an embedding model. See [`docs/module1-explanation.md`](docs/module1-explanation.md) for the pipeline, complexity analysis, limitations, and viva questions.
 
 ### Module 2: Hashtag Intelligence and Analytics
 
@@ -96,12 +105,18 @@ The weights are initial values and can be tuned during testing.
 - The CSV uses the dataset's columns: `Post_Caption`, `Post_Hashtags`, `No_of_likes`, `No_of_comments`, and `No_of_shares`. Hashtags should use `#` prefixes, as in the supplied dataset.
 - **Graph:** each hashtag is a node. Two tags share a weighted, undirected edge whose weight counts the posts where they occur together. Caption matches supply initial candidates; direct neighbors of selected tags expand that set. Graph association is the average Jaccard overlap between a candidate and each selected tag, which reduces the advantage of generic tags.
 - **Scoring:** for each candidate, semantic relevance and engagement are averaged over its five most similar dataset posts. Engagement is `log1p(likes + comments + shares)` normalized against the maximum in the dataset. Graph association is the average Jaccard overlap described above; it is zero when no hashtags were selected. The final score is `0.50 * relevance + 0.30 * association + 0.20 * engagement`. Selected hashtags are excluded from results.
-- **Current scope/deviation:** the workspace dataset `Dataset/instagram_posts_synthetic.csv` has 20,000 synthetic rows; it is not tracked in Git. The original 10,000 rows were preserved, and 10,000 additional synthetic rows were appended, including 1,000 posts tagged `#winter`. The service uses this path by default and reports an error if it is missing; set `CONTENTIQ_DATASET_PATH` to use another CSV. It reads the CSV directly and builds vectors and indexes in memory; it does not persist posts or embeddings in SQLite. The frontend includes the Module 2 analytics dashboard and Module 3 recommendation screen; the other planned application modules are not included yet.
+- **Current scope/deviation:** the repository dataset `Dataset/instagram_posts_synthetic.csv` has 20,000 synthetic rows and is tracked in this checkout. The original 10,000 rows were preserved, and 10,000 additional synthetic rows were appended, including 1,000 posts tagged `#winter`. Services use this path by default and report an error if it is missing; set `CONTENTIQ_DATASET_PATH` to use another CSV. They read the CSV directly and build indexes in memory; posts and embeddings are not persisted in SQLite. The frontend includes Module 1 duplicate detection, the Module 2 analytics dashboard, and the Module 3 recommendation screen.
 
 To run the API from the repository root in PowerShell:
 
 ```powershell
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir backend --reload
+```
+
+On macOS or Linux, from the repository root:
+
+```bash
+.venv/bin/python -m uvicorn app.main:app --app-dir backend --reload
 ```
 
 The service uses `Dataset/instagram_posts_synthetic.csv` by default. To use a different file, set `CONTENTIQ_DATASET_PATH`. The model can be changed with `CONTENTIQ_EMBEDDING_MODEL`.
@@ -112,6 +127,13 @@ To start the frontend manually in a second terminal:
 
 ```powershell
 Set-Location frontend
+npm run dev
+```
+
+On macOS or Linux, run the same frontend command from the `frontend` directory:
+
+```bash
+cd frontend
 npm run dev
 ```
 
@@ -129,6 +151,16 @@ Example request:
 ```
 
 API docs are available at `/docs` while the server is running.
+
+Module 1 request example:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/duplicate-detection/scan \
+  -H 'Content-Type: application/json' \
+  -d '{"similarity_threshold": 0.75}'
+```
+
+The JSON response includes `total_posts_scanned`, `captions_analyzed`, `exact_duplicates`, `near_duplicates`, `unique_captions`, and their corresponding counts. Exact groups contain their normalized caption and associated post rows. Near pairs contain the two original captions, their post rows, and exact Jaccard `similarity`.
 
 **DSA concepts:**
 - Graphs
@@ -249,14 +281,15 @@ An important objective of ContentIQ is to implement fundamental data structures 
 | Data Structure / Algorithm | Application | Status |
 |---|---|---|
 | Separate-chaining hash table; hash maps and lists | Module 2 hashtag aggregates; Module 3 hashtag-to-post lookup | Used by Modules 2 and 3 |
+| Separate-chaining hash table | Module 1 exact normalized-caption grouping | Implemented |
 | Graph | Weighted hashtag co-occurrence and selected-tag associations | Used by Modules 2 and 3 |
 | Max heap | Ranking hashtags and retrieving top-ranked recommendations | Used by Modules 2 and 3 |
 | Merge sort | Deterministic ordering of analytics and related hashtags | Used by Module 2 |
-| Sets | Deduplicating tags and excluding selected hashtags | Used by Module 3 |
+| Sets | Module 1 shingles and Jaccard similarity; Module 3 tag filtering | Used by Modules 1 and 3 |
 | Sorting | Selecting nearest captions and candidate posts | Used by Module 3 |
-| String processing | Extracting and normalizing hashtags | Used by Module 3 |
+| String processing | Module 1 caption normalization and shingling; Module 3 hashtag extraction | Used by Modules 1 and 3 |
 | Tries | Hashtag autocomplete | Planned; not implemented |
-| MinHash | Approximate near-duplicate caption detection | Planned; not implemented |
+| MinHash and LSH | Candidate generation for near-duplicate caption detection | Implemented in Module 1 |
 | Similarity search | Finding semantically similar captions | Used by Module 3 |
 
 ## 7. Suggested Project Structure
@@ -307,11 +340,23 @@ ContentIQ/
 
 Each module will be tested independently.
 
-- Duplicate detection: Precision, Recall and F1-score.
+- Duplicate detection: unit and API tests cover normalization, shingles, Jaccard, deterministic MinHash, LSH candidates, classification, thresholds, and dataset errors. A labeled benchmark is not included, so precision, recall, and F1 have not been measured on real labeled data.
 - Hashtag analytics: Correctness of frequency and engagement calculations.
 - Hashtag recommendations: Unit tests cover graph construction and scoring, selected-tag filtering, dataset validation, and API responses. Precision@K and other offline ranking metrics are not yet evaluated.
 - Backend: API and database testing.
 - DSA: Correctness and time complexity analysis of implemented algorithms.
+
+Run the backend suite from the repository root after installing `backend/requirements.txt`:
+
+```bash
+python -m pytest backend/tests -q
+```
+
+Build-check the frontend from its directory:
+
+```bash
+npm run build
+```
 
 ## 9. Development Roadmap
 
@@ -325,7 +370,7 @@ Each module will be tested independently.
 8. Integrate the backend and frontend.
 9. Test, evaluate and deploy ContentIQ.
 
-The Module 2 hashtag analytics API and Module 3 recommendation API, graph, and frontend are implemented. Module 1 duplicate caption detection and SQLite persistence remain planned work.
+Modules 1, 2, and 3 have backend APIs and frontend routes. SQLite persistence remains planned work; the current modules read CSV data and keep their indexes in memory.
 
 ---
 
@@ -340,6 +385,15 @@ cd frontend
 npm install
 ```
 
+On macOS or Linux, from the repository root:
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r backend/requirements.txt
+cd frontend
+npm install
+```
+
 SQLite is included with Python and requires no separate package. The current hashtag recommendation module reads the CSV directly and does not use SQLite. FAISS remains optional and is not included in the initial setup.
 
 ## 11. Module 3: What We Built and How It Works
@@ -348,7 +402,7 @@ The table below describes the current implementation rather than the future modu
 
 | Part | What we implemented and how it works |
 |---|---|
-| Dataset | Reads `Dataset/instagram_posts_synthetic.csv`, which currently contains 20,000 synthetic posts (the original 10,000 plus 10,000 added rows). It uses `Post_Caption` for text, `Post_Hashtags` for tags, and the three `No_of_*` columns for engagement. The file is not tracked in Git; `CONTENTIQ_DATASET_PATH` can point to another CSV with the same columns. |
+| Dataset | Reads `Dataset/instagram_posts_synthetic.csv`, which currently contains 20,000 synthetic posts (the original 10,000 plus 10,000 added rows). It uses `Post_Caption` for text, `Post_Hashtags` for tags, and the three `No_of_*` columns for engagement. The file is tracked in this repository; `CONTENTIQ_DATASET_PATH` can point to another CSV with the same columns. |
 | Caption embeddings | Uses the Sentence Transformers model `sentence-transformers/all-MiniLM-L6-v2` to encode every dataset caption. The normalized vectors are held in memory. The model and index initialize on the first recommendation request, so that request may take longer and may require a model download. |
 | Caption similarity | Encodes the submitted caption and compares it with dataset vectors using cosine similarity. The `neighbors` request value (default 30) controls how many closest posts supply the initial candidate hashtags. |
 | Hashtag graph | Builds a sparse, undirected graph while reading posts. A hashtag is a node; an edge connects two tags that appear in the same post, and its weight is the number of such posts. The current 20,000-row dataset produces 139 nodes and 1,750 unique edges. |
